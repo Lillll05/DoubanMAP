@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ site_name }} - 数据可视化</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/wordcloud@1.2.2/src/wordcloud2.min.js"></script>
+    <style>
+        :root {
+            --primary: #4361ee;
+            --secondary: #3f37c9;
+            --success: #4cc9f0;
+            --dark: #212529;
+            --light: #f8f9fa;
+        }
+        
+        body {
+            background-color: #f5f7fb;
+            color: var(--dark);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .card {
+            margin-bottom: 25px;
+            border-radius: 12px;
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.08);
+            border: none;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            overflow: hidden;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+        }
+        
+        .card-header {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            font-weight: 600;
+            padding: 15px 20px;
+            border-radius: 12px 12px 0 0 !important;
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 350px;
+            margin-bottom: 15px;
+        }
+        
+        #wordcloud {
+            width: 100%;
+            height: 450px;
+            border-radius: 12px;
+            background: white;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        }
+        
+        .filter-section {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 25px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+        }
+        
+        .filter-title {
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .filter-title i {
+            font-size: 1.2rem;
+        }
+        
+        .btn-apply {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            border: none;
+            font-weight: 600;
+            padding: 10px 25px;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-apply:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(67, 97, 238, 0.3);
+        }
+        
+        h1 {
+            color: var(--primary);
+            font-weight: 700;
+            margin-bottom: 30px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            position: relative;
+            padding-bottom: 15px;
+        }
+        
+        h1::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100px;
+            height: 4px;
+            background: linear-gradient(90deg, var(--primary), var(--success));
+            border-radius: 2px;
+        }
+        
+        .stats-badge {
+            background: var(--success);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container py-4">
+        <h1 class="text-center mb-4">电影数据可视化分析</h1>
+        
+        <!-- 筛选控件 -->
+        <div class="filter-section">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">国家/地区</label>
+                    <select id="country-filter" class="form-select" multiple>
+                        <option value="all" selected>全部</option>
+                        {% for country in stats_data.country_options %}
+                        <option value="{{ country }}">{{ country }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">年份范围</label>
+                    <select id="year-range" class="form-select">
+                        <option value="all">全部年份</option>
+                        <option value="2020-">2020年以后</option>
+                        <option value="2010-2019">2010-2019</option>
+                        <option value="2000-2009">2000-2009</option>
+                        <option value="1990-1999">1990-1999</option>
+                        <option value="1980-1989">1980-1989</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">最低评分</label>
+                    <select id="min-rating" class="form-select">
+                        <option value="0">全部</option>
+                        <option value="8">8分以上</option>
+                        <option value="9">9分以上</option>
+                    </select>
+                </div>
+                <div class="col-12 text-center">
+                    <button id="apply-filters" class="btn btn-primary">应用筛选</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- 评分分布柱形图 -->
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        评分分布
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="ratingChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 类型分布饼图 -->
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header bg-success text-white">
+                        类型分布
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="genreChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 词云 -->
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header bg-info text-white">
+                        热门关键词词云
+                    </div>
+                    <div class="card-body">
+                        <div id="wordcloud"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 安全数据传递 - 使用JSON字符串（带默认值处理）
+        const rawDataJSON = `{{ {
+            "ratingDistribution": stats_data.rating_distribution | default([]),
+            "genreDistribution": stats_data.genre_distribution | default([]),
+            "quotes": quotes | default([])
+        } | tojson | safe }}`;
+        
+        let rawData;
+        try {
+            rawData = JSON.parse(rawDataJSON);
+        } catch (e) {
+            console.error("数据解析错误:", e);
+            rawData = {
+                ratingDistribution: [],
+                genreDistribution: [],
+                quotes: []
+            };
+        }
+
+        // 初始化图表
+        function initCharts() {
+            // 评分分布柱形图
+            const ratingCtx = document.getElementById('ratingChart').getContext('2d');
+            const ratingChart = new Chart(ratingCtx, {
+                type: 'bar',
+                data: {
+                    labels: rawData.ratingDistribution.map(item => item[0]),
+                    datasets: [{
+                        label: '电影数量',
+                        data: rawData.ratingDistribution.map(item => item[1]),
+                        backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: '电影数量'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: '评分'
+                            }
+                        }
+                    }
+                }
+            });
+
+            // 类型分布饼图
+            const genreCtx = document.getElementById('genreChart').getContext('2d');
+            const genreChart = new Chart(genreCtx, {
+                type: 'pie',
+                data: {
+                    labels: rawData.genreDistribution.map(item => item[0]),
+                    datasets: [{
+                        data: rawData.genreDistribution.map(item => item[1]),
+                        backgroundColor: [
+                            'rgba(255, 99, 132, 0.7)',
+                            'rgba(54, 162, 235, 0.7)',
+                            'rgba(255, 206, 86, 0.7)',
+                            'rgba(75, 192, 192, 0.7)',
+                            'rgba(153, 102, 255, 0.7)',
+                            'rgba(255, 159, 64, 0.7)',
+                            'rgba(199, 199, 199, 0.7)',
+                            'rgba(83, 102, 255, 0.7)',
+                            'rgba(40, 159, 64, 0.7)',
+                            'rgba(210, 99, 132, 0.7)'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right'
+                        }
+                    }
+                }
+            });
+        } // 添加缺失的闭合大括号
+
+        // 修复词云显示问题
+        function initWordCloud() {
+            const wordCloudElement = document.getElementById('wordcloud');
+            wordCloudElement.innerHTML = ''; // 清空容器
+            
+            const quotes = rawData.quotes || [];
+            if (!quotes || quotes.length === 0) {
+                wordCloudElement.innerHTML = '<p class="text-center p-4">没有可用的引语数据</p>';
+                return;
+            }
+            
+            const wordCount = {};
+            
+            // 处理所有引语
+            for (const quote of quotes) {
+                if (!quote) continue;
+                
+                // 分割引语为单词
+                const words = quote.split(/[，。！？、\s]+/);
+                
+                // 统计单词出现次数
+                for (const word of words) {
+                    if (word.length > 1) {
+                        wordCount[word] = (wordCount[word] || 0) + 1;
+                    }
+                }
+            }
+            
+            // 准备词云数据
+            const wordList = [];
+            for (const [text, count] of Object.entries(wordCount)) {
+                wordList.push([text, count * 8]); // 增加权重系数
+            }
+            
+            // 按频率排序并取前100
+            wordList.sort((a, b) => b[1] - a[1]);
+            const topWords = wordList.slice(0, 100);
+            
+            if (topWords.length === 0) {
+                wordCloudElement.innerHTML = '<p class="text-center p-4">没有足够的关键词生成词云</p>';
+                return;
+            }
+            
+            // 初始化词云
+            WordCloud(wordCloudElement, { 
+                list: topWords,
+                gridSize: 12,
+                weightFactor: 8,
+                fontFamily: 'sans-serif',
+                color: function(word, weight, fontSize, distance, rotation) {
+                    const colors = ['#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6'];
+                    return colors[Math.floor(Math.random() * colors.length)];
+                },
+                rotateRatio: 0.5,
+                rotationSteps: 2,
+                backgroundColor: '#f8f9fa',
+                wait: 50 // 增加渲染延迟确保完全加载
+            });
+        }
+
+        // 应用筛选
+        document.getElementById('apply-filters').addEventListener('click', () => {
+            // 获取筛选条件
+            const selectedCountries = Array.from(document.getElementById('country-filter').selectedOptions)
+                .map(option => option.value)
+                .filter(value => value !== 'all');
+            
+            const yearRange = document.getElementById('year-range').value;
+            const minRating = parseFloat(document.getElementById('min-rating').value);
+            
+            // 应用筛选逻辑（这里需要后端支持，暂时保留前端提示）
+            alert('筛选功能已触发！实际筛选需要后端API支持。');
+        });
+
+        // 页面加载完成后初始化图表和词云
+        window.addEventListener('DOMContentLoaded', () => {
+            initCharts();
+            initWordCloud();
+        });
+    </script>
+</body>
+</html>
